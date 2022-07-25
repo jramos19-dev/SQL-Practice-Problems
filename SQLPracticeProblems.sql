@@ -102,4 +102,68 @@ on s.SupplierID = p.SupplierID
 order by productId
 
 
---19
+--19show list of orders , include shipper that was used, show order id, orderdate(date only) and company name of the shipper, sort by orderId.
+--show  only rows where orderid less than 10300
+select OrderID,CONVERT(date,OrderDate) as orderDate, s.CompanyName from Orders o
+join Shippers s 
+on o.ShipVia = s.ShipperID
+where o.OrderID < 10300
+order by OrderID
+
+
+--20 total number of products in each category . sort the results by the total number of products in desc order.
+select c.CategoryName , count(p.ProductID) as TotalProducts from Products p
+join Categories c
+on p.CategoryID = c.CategoryID
+group by CategoryName
+order by TotalProducts desc
+
+
+--21 total number of customers per country and city
+select country, city, count(CustomerID) as TotalCustomer from customers
+group by country,City 
+order by TotalCustomer desc
+
+
+--22 show units in stock and reorderlevel, where unitesinstock is less than reorderlevel,ignoring the fields units on order and discontinued.
+--order results by product id
+select ProductID,ProductName,UnitsInStock,ReorderLevel from Products
+where UnitsInStock < ReorderLevel
+order by ProductID
+
+
+
+--23 incorporate fields units in stock, units on order, reorderLevel,discontinued into calculuation. define products that need reordering 
+--by saying units in stock plus units on order are lass than or equal to reorder level
+-- discontinued flag musl be false 
+select ProductID,ProductName,UnitsInStock,ReorderLevel from Products
+where (UnitsInStock + UnitsOnOrder) <= ReorderLevel
+and Discontinued = 0;
+
+
+
+--24 A list of customers sorted by region alphabetically. customers with no region . to be at the end . within the same region companies should be sorted by cusdtomer id
+select  CustomerID,CompanyName,Region from customers 
+order by case 
+when region is null then 1 
+else 0
+end, Region,
+CustomerID
+
+
+--25 Height freight charges -return three ship countries with the higest average freight overall in descending order by average freight
+select top 3 ShipCountry, avg(freight) as AverageFreight from orders
+group by ShipCountry
+order by AverageFreight desc
+
+
+--26 continue on 25 but with only orders from the year 1998 , the book uses 2015 but i downloaded an older version of the Northwind database
+select top 3 ShipCountry, avg(freight) as AverageFreight from orders
+where DATEPART(year, convert( date,OrderDate))= '1998'
+group by ShipCountry
+order by AverageFreight desc
+
+--27 find the order id that is not included in the problem (wrong) answer , per the book material
+
+select * from orders 
+order by OrderDate desc
