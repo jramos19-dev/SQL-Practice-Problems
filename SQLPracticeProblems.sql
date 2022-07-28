@@ -474,13 +474,12 @@ select c.CustomerID,c.CompanyName,TotalOrderAmmount= sum(quantity * unitprice) f
 -- the old one will take care of the group names, and the number by giving me acoutnt. 
 -- took a while because i wanted to use the previous case option alias but you cant do that. so had to first give the count(employeeid) then 
 -- give it 
--- might be easier to create a temp table
-
+-- might be easier to create a temp table 
 
 with orders2016 as(
-select c.CustomerID, c.CompanyName,totalOrderAmmount=(Quantity * UnitPrice) from Customers c
+select c.CustomerID, c.CompanyName,totalOrderAmmount=sum(Quantity * UnitPrice) from customers c
 join orders o
-on c.CustomerID = o.CustomerID
+on o.CustomerID = c.CustomerID
 join OrderDetails od
 on o.OrderID = od.OrderID
 	where
@@ -489,7 +488,8 @@ on o.OrderID = od.OrderID
 	group by 
 		c.CustomerID,
 		c.CompanyName
-),customerGrouping as ( --calling another common table expression within my primary cte
+		
+), customerGrouping as ( --calling another common table expression within my primary cte
 	select CustomerID,CompanyName,totalOrderAmmount,customerGroup=  
 	case 
 	when totalOrderAmmount >=0 and totalOrderAmmount <1000 then 'low'
@@ -499,5 +499,103 @@ on o.OrderID = od.OrderID
 	end
 	from  orders2016 
 	)
-	select from customerGrouping
-		
+	select  customerGroup,totalInGroup = count(*) , percentageInGroup=(count(*) * 1.0/(select count(*) from customerGrouping)) from customerGrouping
+	group by customerGroup
+	order by percentageInGroup desc
+
+--51 customer gropuing flexible= use a cusotmergropuing threshhold table to not have to write the '
+select * from CustomerGroupThresholds;
+
+with orders2016 as(
+select c.CustomerID, c.CompanyName,totalOrderAmmount=sum(Quantity * UnitPrice) from customers c
+join orders o
+on o.CustomerID = c.CustomerID
+join OrderDetails od
+on o.OrderID = od.OrderID
+	where
+	OrderDate >= '20160101'
+	and OrderDate < '20170101'
+	group by 
+		c.CustomerID,
+		c.CompanyName
+)select CustomerID ,totalOrderAmmount,CustomerGroupName
+from orders2016
+	join CustomerGroupThresholds
+		on orders2016.totalOrderAmmount between
+		CustomerGroupThresholds.RangeBottom and CustomerGroupThresholds.RangeTop
+		order by CustomerID
+
+
+--52  countries with suppliers or customersd .. find all the countries where a supplier or customer lives and return them all. 
+with customerCountry as(
+select OrderID, country from Customers
+join Orders on
+customers.CustomerID = Orders.CustomerID
+),shipperCountry as (select country, OrderID from Suppliers
+join products on products.SupplierID = Suppliers.SupplierID
+join OrderDetails on OrderDetails.ProductID = Products.ProductID
+)select country from customerCountry 
+union select country from shipperCountry;
+
+--53divide them into 2 columns for customer country and for shipper country
+with supplierCountries as (
+select distinct country from suppliers ),
+customerCountriesas as (
+select distinct country from Customers)
+select supplierCountry=supplierCountries.country, 
+customerCountry = customerCountriesas.country 
+from supplierCountries full outer join customerCountriesas 
+on supplierCountries.Country= customerCountriesas.country;
+
+
+--54country name total suppliers and total customers
+with supplierCountries as (
+select country,count(country) TotalSuppliers from suppliers 
+group by Country ),
+customerCountriesas as (
+select country, count(country)TotalCustomers from Customers
+group by Country)
+
+select case 
+when cc.Country is null then sc.Country 
+when cc.Country is not null then cc.Country 
+end
+Country,ISNULL( sc.TotalSuppliers,0)TotalSuppliers, isNull(cc.TotalCustomers,0)TotalCustomers
+from supplierCountries sc full outer join customerCountriesas cc
+on sc.Country= cc.country;
+
+
+--55first order for every ship country customer id order id and order date 
+with cte_firstOrder as (
+select ShipCountry, customerId,OrderId,OrderDate = convert(date,OrderDate),
+RowNumberPerCountry= ROW_NUMBER() over (Partition by shipCountry  order by shipCountry,Orderid)
+from orders 
+)
+select ShipCountry,CustomerID, OrderID,OrderDate from cte_firstOrder
+where RowNumberPerCountry =1
+order by 
+ShipCountry,OrderID
+
+
+--56 customers with multiple orders in a 5 day period
+
+select distinct InitialOrders.CustomerID,InitialOrders.OrderID initialOrderId,InitialOrders.OrderDate InitialOrderDate,nextOrder.OrderID NextOrderId,nextOrder.OrderDate NextOrderDate,DaysBetween= datediff(d,InitialOrders.OrderDate,nextOrder.OrderDate )from orders InitialOrders
+ join orders nextOrder on 
+ InitialOrders.CustomerID = nextOrder.CustomerID
+ and InitialOrders.OrderID < nextOrder.OrderID
+ where datediff(d,InitialOrders.OrderDate,nextOrder.OrderDate ) between 0 and 5
+ order by InitialOrders.CustomerID
+
+
+
+ --57same as the last one but using the  lead window function then use a cte and date diff
+ with cteOrdersandNext as(
+select customerId,
+OrderDate = convert(date,orderdate)
+,nextOrderDate= convert(date,Lead(orderdate,1) over(partition by customerid order by customerId,orderdate)
+)
+from Orders
+)
+select distinct CustomerID,OrderDate,nextOrderDate,datediff(d,OrderDate,nextOrderDate) DaysBetween from cteOrdersandNext
+where 
+order by CustomerID
